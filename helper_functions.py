@@ -13,7 +13,14 @@ import matplotlib.pyplot as plt
 import gdal
 
 
-
+def warp(args):
+    # command construction with binary and options
+    options = ['/opt/anaconda/bin/gdalwarp']
+    options.extend(args)
+    # call gdalwarp 
+    subprocess.check_call(options)
+    
+    
 def reproject_image_to_master ( master, slave, layer, 
                                res=None ):
     """This function reprojects an image (``slave``) to
@@ -39,7 +46,7 @@ def reproject_image_to_master ( master, slave, layer,
     The reprojected filename
 
     """
-    slave_ds = gdal.Open( slave )
+    slave_ds = gdal.Open( layer % slave )
     if slave_ds is None:
         raise IOError, "GDAL could not open slave file %s " \
             % slave
@@ -53,23 +60,23 @@ def reproject_image_to_master ( master, slave, layer,
         raise IOError, "GDAL could not open master file %s " \
             % master
     master_proj = master_ds.GetProjection()
-    master_geotrans = master_ds.GetGeoTransform()
+    master_geo = list(master_ds.GetGeoTransform())
     w = master_ds.RasterXSize
     h = master_ds.RasterYSize
-    if res is not None:
-        master_geotrans[1] = float( res )
-        master_geotrans[-1] = - float ( res )
-
-    dst_filename = slave.replace( ".tif", "_crop.vrt" )
-    dst_ds = gdal.GetDriverByName('VRT').Create(dst_filename,
-                                                w, h, n_bands, data_type)
-    dst_ds.SetGeoTransform( master_geotrans )
-    dst_ds.SetProjection( master_proj)
-
-    gdal.ReprojectImage( slave_ds, dst_ds, slave_proj,
-                         master_proj, gdal.GRA_NearestNeighbour)
-    dst_ds = None  # Flush to disk
-    return dst_filename
+    extent = (master_geo[0], 
+              master_geo[3]+h*master_geo[-1],
+              master_geo[0]+w*master_geo[1],
+              master_geo[3])
+    
+    s = osr.SpatialReference(master_proj)
+    epsg = s.GetAttrValue("AUTHORITY", 1)
+    
+    output = slave.replace(".hdf", "_cropped.vrt")
+    warp(['-overwrite', '-of', 'VRT', 
+          '-t_srs', "EPSG:%s"%epsg, '-te',
+          '%f'%extent[0], '%f'%extent[1],'%f'%extent[2],
+          '%f'%extent[3], layer%slave, output])
+    return output
 
 
 def hplot(x,y,bar=True,log=True,image=0,new=True,thresh = 10,xlim=[0,1],ylim=[0,1],bins=[128,128]):
