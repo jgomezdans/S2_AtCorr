@@ -14,6 +14,7 @@ from collections import namedtuple
 import numpy as np
 import gdal
 
+
 from helper_functions import reproject_image_to_master, hplot
 from helper_functions import parse_xml
 
@@ -48,6 +49,17 @@ class TeleSpazioComparison(object):
         self.tile = tile
         self.l1c_files = self._get_safe_files("L1C")
         self.l2a_files = self._get_safe_files("L2A")
+        self.l1c_datasets = {}
+        self.l2a_datasets = {}
+        for the_date in self.l1c_files.iterkeys():
+            retval = self.get_l1c_data(the_date)
+            if retval is None:
+                continue
+                # No tile found
+            self.l1c_datasets[the_date]=retval
+            self.l2a_datasets[the_date] = self.get_l2_data(
+                the_date)
+                
         
         
     def _get_safe_files(self, file_type):
@@ -207,9 +219,11 @@ class TeleSpazioComparison(object):
         
     def get_modis_files(self, site):
         """Gets the MODIS files. You get in return a dictionary
-        with the same keys as the L1 and L2 datasets, with the 
-        filenames for the MCD43A1 and MCD43A2 products.
+        with the same keys as the L1 andHCD43A2 products.
         """
+        layer_selector = {
+            'MCD43A1':['HDF4_EOS:EOS_GRID:"%s":MOD_Grid_BRDF:BRDF_Albedo_Parameters_Band'+"%d"%(b+1) for b in xrange(7)],
+            'MCD43A2':['HDF4_EOS:EOS_GRID:"%s":MOD_Grid_BRDF:BRDF_Albedo_Uncertainty','HDF4_EOS:EOS_GRID:"%s":MOD_Grid_BRDF:Snow_BRDF_Albedo']}
         modis_mapper = {}
         for product in [ "MCD43A1", "MCD43A2"]:
             modis_mapper[product] = {}
@@ -223,11 +237,19 @@ class TeleSpazioComparison(object):
                         "%Y%j")
                         for d in modis_dates_t]
             
-            for s2_date in self.l2a_files.iterkeys():
+            for s2_date in self.l2a_datasets.iterkeys():
                 for i, modis_date in enumerate(modis_dates):
                     if modis_date.date() == s2_date.date():
-                        modis_mapper[product][s2_date] = \
-                            files[i]
+                        master=self.get_l2_data(s2_date).scl_20
+                        # Now, reproject/crop all layers for
+                        # this product...
+                        fnames = []
+                        for layer in layer_selector[product]:
+                            fnames.append(
+                                reproject_image_to_master (
+                                master, files[i], layer))
+
+                        modis_mapper[product][s2_date] = fnames
         return modis_mapper
 
 if __name__ == "__main__":
@@ -236,6 +258,6 @@ if __name__ == "__main__":
         print ts.get_l1c_data(the_date)
         if ii == 5:
             break
-    ts.do_scatter(the_date, "B02")
-    #modis_times = ts.get_modis_files("Ispra")
+    #ts.do_scatter(the_date, "B02")
+    modis_times = ts.get_modis_files("Ispra")
         

@@ -4,6 +4,7 @@ Extract S2 L1, S2 L2, MODIS and Landsat data to do comparisons
 
 
 """
+import subprocess
 import xml.etree.ElementTree as ET
 import datetime
 
@@ -11,6 +12,7 @@ import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import gdal
+import osr
 
 
 def warp(args):
@@ -70,8 +72,9 @@ def reproject_image_to_master ( master, slave, layer,
     
     s = osr.SpatialReference(master_proj)
     epsg = s.GetAttrValue("AUTHORITY", 1)
-    
-    output = slave.replace(".hdf", "_cropped.vrt")
+    suffix = layer.split("_")[-1]
+    output = slave.replace(".hdf", 
+                           "_%s_cropped.vrt"%suffix)
     warp(['-overwrite', '-of', 'VRT', 
           '-t_srs', "EPSG:%s"%epsg, '-te',
           '%f'%extent[0], '%f'%extent[1],'%f'%extent[2],
