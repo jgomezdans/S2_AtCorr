@@ -114,7 +114,6 @@ class TeleSpazioComparison(object):
         l1c_dir = self.l1c_files[the_date]
         granule_dir0 = os.path.join(l1c_dir, "GRANULE/")
         for granule in os.listdir(granule_dir0):
-            print granule
             if granule.find(self.tile) >= 0:
                 granule_dir = os.path.join(granule_dir0,
                                            granule)
@@ -201,7 +200,7 @@ class TeleSpazioComparison(object):
                         if fich.find("{}_20m.jp2".format(
                             selected_band)) >= 0:
                             study_bands[selected_band] = fich
-                            print fich
+
                 for ii,selected_band in enumerate(["AOT", 
                                                    "WVP"]):
                     for fich in files:
@@ -209,7 +208,7 @@ class TeleSpazioComparison(object):
                             selected_band)) >= 0) and \
                             (fich.find(".jp2") >= 0):
                             study_bands[selected_band] = fich
-                            print fich
+
 
             elif resolution == "R60m":
                 for ii,selected_band in enumerate([ 
