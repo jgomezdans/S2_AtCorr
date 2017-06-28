@@ -13,6 +13,7 @@ from collections import namedtuple
 
 import numpy as np
 import gdal
+import matplotlib.pyplot as plt
 
 
 from helper_functions import reproject_image_to_master, hplot
@@ -91,7 +92,7 @@ class TeleSpazioComparison(object):
         l1c_dir = self.l1c_files[the_date]
         granule_dir0 = os.path.join(l1c_dir, "GRANULE/")
         for granule in os.listdir(granule_dir0):
-            print granule
+            
             if granule.find(self.tile) >= 0:
                 granule_dir = os.path.join(granule_dir0,
                                            granule)
@@ -111,6 +112,7 @@ class TeleSpazioComparison(object):
         Returns a TOA_set object, with the bands at their
         native resolutions
         """
+
         l1c_dir = self.l1c_files[the_date]
         granule_dir0 = os.path.join(l1c_dir, "GRANULE/")
         for granule in os.listdir(granule_dir0):
@@ -203,6 +205,10 @@ class TeleSpazioComparison(object):
     def do_scatter(self, the_date, band):
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.get_l2_data(the_date)
+        if toa_set is None or boa_set is None:
+            print "No TILEs found for %s" % the_date
+            return None
+            
         g = gdal.Open(toa_set[TOA_list.index(band)])
         toa_rho = g.ReadAsArray()
         g = gdal.Open(boa_set[BOA_list.index(band)])
@@ -214,8 +220,18 @@ class TeleSpazioComparison(object):
         toa_rho = toa_rho/10000.
         boa_rho = boa_rho/10000.
         mask = mask_boa*mask_toa
-        import pdb;pdb.set_trace()
+        
         hplot(boa_rho[~mask][::10], toa_rho[~mask][::10])
+        ax = plt.gca()
+        ax.set_title("%s - %s" % (the_date, band))
+        ax.set_xlabel("BOA refl %s" % band)
+        ax.set_ylabel("TOA refl %s" % band)
+        plt.savefig("TeleSpazio_%s_%s_%s_%s.png" % (self.site, self.tile, the_date, band), 
+                   dpi=150)
+        plt.savefig("TeleSpazio_%s_%s_%s_%s.png" % (self.site, self.tile, the_date, band), 
+                   dpi=150)
+        plt.close("all")
+
         
     def get_modis_files(self, site):
         """Gets the MODIS files. You get in return a dictionary
@@ -255,9 +271,11 @@ class TeleSpazioComparison(object):
 if __name__ == "__main__":
     ts = TeleSpazioComparison("Ispra", "T32TMR")
     for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
-        print ts.get_l1c_data(the_date)
-        if ii == 5:
-            break
+        #print ts.get_l1c_data(the_date)
+        
+        ts.do_scatter(the_date, "B02")
+        #    ts.do_scatter(the_date, "B08")
+        
     #ts.do_scatter(the_date, "B02")
-    modis_times = ts.get_modis_files("Ispra")
+    #modis_times = ts.get_modis_files("Ispra")
         

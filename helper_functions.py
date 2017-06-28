@@ -101,7 +101,7 @@ def hplot(x,y,bar=True,log=True,image=0,new=True,thresh = 10,xlim=[0,1],ylim=[0,
     if bar:
       im = plt.imshow(image,cmap='magma',extent=np.array(xyrange).flatten(),\
                    interpolation='nearest')
-      plt.plot(xyrange[0],xyrange[1],'w--')
+      plt.plot(xyrange[0],xyrange[1],'g--', lw=1.5)
       plt.colorbar(fraction=0.04)
     return image
 
