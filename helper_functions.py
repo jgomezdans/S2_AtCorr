@@ -75,7 +75,7 @@ def reproject_image_to_master ( master, slave, layer,
     suffix = layer.split("_")[-1]
     output = slave.replace(".hdf", 
                            "_%s_cropped.vrt"%suffix)
-    warp(['-overwrite', '-of', 'VRT', 
+    warp(['-overwrite', '-of', 'VRT', '-tap', '-tr', '480', '480',
           '-t_srs', "EPSG:%s"%epsg, '-te',
           '%f'%extent[0], '%f'%extent[1],'%f'%extent[2],
           '%f'%extent[3], layer%slave, output])
