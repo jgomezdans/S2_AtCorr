@@ -202,7 +202,7 @@ class TeleSpazioComparison(object):
         dataset = [ study_bands[k] for k in BOA_list]
         return BOA_set(*dataset)
         
-    def do_scatter(self, the_date, band):
+    def do_scatter(self, the_date, band, region=None):
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.get_l2_data(the_date)
         if toa_set is None or boa_set is None:
@@ -221,6 +221,10 @@ class TeleSpazioComparison(object):
         boa_rho = boa_rho/10000.
         mask = mask_boa*mask_toa
         
+        if region is not None:
+            boa_rho = boa_rho[region]
+            toa_rho = toa_rho[region]
+            mask = mask[region]
         hplot(boa_rho[~mask][::10], toa_rho[~mask][::10])
         ax = plt.gca()
         ax.set_title("%s - %s" % (the_date, band))
@@ -228,7 +232,7 @@ class TeleSpazioComparison(object):
         ax.set_ylabel("TOA refl %s" % band)
         plt.savefig("TeleSpazio_%s_%s_%s_%s.png" % (self.site, self.tile, the_date, band), 
                    dpi=150)
-        plt.savefig("TeleSpazio_%s_%s_%s_%s.png" % (self.site, self.tile, the_date, band), 
+        plt.savefig("TeleSpazio_%s_%s_%s_%s.pdf" % (self.site, self.tile, the_date, band), 
                    dpi=150)
         plt.close("all")
 
