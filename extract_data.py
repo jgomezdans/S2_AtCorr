@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 """
 Extract S2 L1, S2 L2, MODIS and Landsat data to do comparisons
 
@@ -10,11 +11,11 @@ import os
 import sys
 from collections import namedtuple
 
+from sklearn import linear_model
 
 import numpy as np
 import gdal
-import matplotlib.pyplot as plt
-
+import pylab as plt
 
 from helper_functions import reproject_image_to_master, hplot
 from helper_functions import parse_xml
@@ -92,7 +93,7 @@ class TeleSpazioComparison(object):
         l1c_dir = self.l1c_files[the_date]
         granule_dir0 = os.path.join(l1c_dir, "GRANULE/")
         for granule in os.listdir(granule_dir0):
-            
+            print granule
             if granule.find(self.tile) >= 0:
                 granule_dir = os.path.join(granule_dir0,
                                            granule)
@@ -112,7 +113,6 @@ class TeleSpazioComparison(object):
         Returns a TOA_set object, with the bands at their
         native resolutions
         """
-
         l1c_dir = self.l1c_files[the_date]
         granule_dir0 = os.path.join(l1c_dir, "GRANULE/")
         for granule in os.listdir(granule_dir0):
@@ -197,18 +197,13 @@ class TeleSpazioComparison(object):
                         if fich.find("{}_60m.jp2".format(
                             selected_band)) >= 0:
                             study_bands[selected_band] = fich
-                            
                 study_bands["B10"] = None
         dataset = [ study_bands[k] for k in BOA_list]
         return BOA_set(*dataset)
         
-    def do_scatter(self, the_date, band, region=None):
+    def do_scatter(self, the_date, band, sub=10):
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.get_l2_data(the_date)
-        if toa_set is None or boa_set is None:
-            print "No TILEs found for %s" % the_date
-            return None
-            
         g = gdal.Open(toa_set[TOA_list.index(band)])
         toa_rho = g.ReadAsArray()
         g = gdal.Open(boa_set[BOA_list.index(band)])
@@ -220,23 +215,69 @@ class TeleSpazioComparison(object):
         toa_rho = toa_rho/10000.
         boa_rho = boa_rho/10000.
         mask = mask_boa*mask_toa
-        
-        if region is not None:
-            boa_rho = boa_rho[region]
-            toa_rho = toa_rho[region]
-            mask = mask[region]
-        hplot(boa_rho[~mask][::10], toa_rho[~mask][::10])
-        ax = plt.gca()
-        ax.set_title("%s - %s" % (the_date, band))
-        ax.set_xlabel("BOA refl %s" % band)
-        ax.set_ylabel("TOA refl %s" % band)
-        plt.savefig("TeleSpazio_%s_%s_%s_%s.png" % (self.site, self.tile, the_date, band), 
-                   dpi=150)
-        plt.savefig("TeleSpazio_%s_%s_%s_%s.pdf" % (self.site, self.tile, the_date, band), 
-                   dpi=150)
-        plt.close("all")
+        import pdb;pdb.set_trace()
+        hplot(boa_rho[~mask][::sub], toa_rho[~mask][::sub])
 
-        
+    def get_transform(self, the_date, band, sub=10, nv=200, lw=2, odir='figures'):
+
+        # ensure odir exists
+        if not os.path.exists(odir): os.makedirs(odir)
+
+        fname = odir+'/'+'%s_%s'%(the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
+
+        toa_set = self.get_l1c_data(the_date)
+        boa_set = self.get_l2_data(the_date)
+        if toa_set is None or boa_set is None:
+            print "No TILEs found for %s" % the_date
+            return None
+        g = gdal.Open(toa_set[TOA_list.index(band)])
+        toa_rho = g.ReadAsArray()
+        g = gdal.Open(boa_set[BOA_list.index(band)])
+        boa_rho = g.ReadAsArray()
+        mask_toa = np.logical_or(toa_rho == 0,
+                                  toa_rho > 20000)
+        mask_boa = np.logical_or(boa_rho == 0,
+                                  boa_rho > 20000)
+        toa_rho = toa_rho/10000.
+        boa_rho = boa_rho/10000.
+        mask = mask_boa*mask_toa
+        x = boa_rho[~mask][::sub]
+        y = toa_rho[~mask][::sub]
+
+        vmin = np.min([0.0,np.min(x),np.min(y)])
+        vmax = np.max([1.0,np.max(x),np.max(y)])
+
+        ns = x.size
+        # robust linear model fit
+        model = linear_model.LinearRegression(n_jobs=-1)
+        model_ransac = linear_model.RANSACRegressor(model)
+        model_ransac.fit(y.reshape(ns,1), x) 
+        inlier_mask = model_ransac.inlier_mask_
+        outlier_mask = np.logical_not(inlier_mask)
+        line_X = np.arange(vmin,vmax,(vmax-vmin)/nv)       
+        line_y_ransac = model_ransac.predict(line_X[:, np.newaxis])
+        xlim = ylim = [vmin,vmax]
+
+        hplot(x, y, new=True,xlim=xlim,ylim=ylim)
+        xyrange = xlim,ylim
+        plt.xlim(xlim)
+        plt.plot(xyrange[0],xyrange[1],'g--', label='1:1 line')
+        plt.plot(line_y_ransac, line_X, color='red', linestyle='-',linewidth=lw, label='RANSAC regressor') 
+        plt.xlabel('BOA reflectance Band %s'%band)
+        plt.ylabel('TOA reflectance Band %s'%band)
+
+        a,b = model_ransac.predict(np.array([0.,1.])[:, np.newaxis])
+        plt.title(the_date.strftime("%Y-%m-%d %H:%M:%S") + \
+		'\nBOA(%s) = %.3f + %.3f TOA(%s)'%(band,a,b-a,band) + \
+		'\nTOA(%s) = %.3f + %.3f BOA(%s)'%(band,a/(a-b),1./(b-a),band))
+
+        if vmax > 1:
+            plt.plot(xlim,[1.0,1.0],'k--',label='TOA reflectance == 1')
+        plt.legend(loc='best')
+        plt.savefig(fname+'.scatter.pdf')
+        plt.close() 
+        return model_ransac
+
     def get_modis_files(self, site):
         """Gets the MODIS files. You get in return a dictionary
         with the same keys as the L1 andHCD43A2 products.
@@ -275,11 +316,11 @@ class TeleSpazioComparison(object):
 if __name__ == "__main__":
     ts = TeleSpazioComparison("Ispra", "T32TMR")
     for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
-        #print ts.get_l1c_data(the_date)
-        
-        ts.do_scatter(the_date, "B02")
-        #    ts.do_scatter(the_date, "B08")
-        
-    #ts.do_scatter(the_date, "B02")
+        print ts.get_l1c_data(the_date)
+        if ii == 5:
+            break
+
+    # do scatter plot and get transform
+    model = ts.get_transform(the_date, "B02")
     #modis_times = ts.get_modis_files("Ispra")
         
