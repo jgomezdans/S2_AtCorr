@@ -19,7 +19,7 @@ import gdal
 import pylab as plt
 
 from helper_functions import reproject_image_to_master, hplot
-from helper_functions import parse_xml
+from helper_functions import parse_xml, load_emulator_training_set
 
 parent_folder = "/data/selene/ucfajlg/S2_AC/TeleSpazio/" + \
                 "ftp.telespazio.fr/outgoing/L2A_Products/"
@@ -240,7 +240,7 @@ class TeleSpazioComparison(object):
 
     def get_transform(self, the_date, band, mask="L2",
                       sub=10, nv=200, lw=2, odir='figures',
-                      apply_model=False):
+                      apply_model=False, plausible=True):
 
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
@@ -305,6 +305,9 @@ class TeleSpazioComparison(object):
 
         if vmax > 1:
             plt.plot(xlim,[1.0,1.0],'k--',label='TOA reflectance == 1')
+        if plausible:
+            boa_emu, toa_emu = load_emulator_training_set()
+            plt.plot(boa_emu, toa_emu[band], '+', markersize=3, c="cyan", label="Plausible")
         plt.legend(loc='best')
         plt.savefig(fname+'.scatter.pdf')
         plt.close() 
@@ -361,5 +364,5 @@ if __name__ == "__main__":
 
     # do scatter plot and get transform
     model, boa_approx = ts.get_transform(the_date, "B02", apply_model=True)
-    #modis_times = ts.get_modis_files("Ispra")
+    ##modis_times = ts.get_modis_files("Ispra")
         

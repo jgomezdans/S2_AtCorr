@@ -24,7 +24,9 @@ MCD43A1 =  modis_times['MCD43A1'][the_date]
 # need to know which bands for the mapping
 mapping = pickle.load(open('transfer_functions/mappings.dump','r'))
 
-s2map = mapping['sentinel2']
+# Mapping is a dictionary ordered by key
+s2map = dict(zip([ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
+            "B08", "B8A", "B09", "B10", "B11", "B12"], mapping['sentinel2']))
 
 # read s2 data
 sza,saa,vza,vaa = ts.get_l1c_angles(the_date)
@@ -42,7 +44,7 @@ kk = np.array([k0,k1,k2])[:,np.newaxis, np.newaxis]
 s2sim = []
 
 ns2 = len(s2map)
-j = 0
+j = "B01" #(eg)
 modis_bands = s2map[j]['terra']['bandsB']
 nb = modis_bands.shape[0]
 # read MODIS data

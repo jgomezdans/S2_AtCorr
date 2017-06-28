@@ -4,6 +4,7 @@ Extract S2 L1, S2 L2, MODIS and Landsat data to do comparisons
 
 
 """
+import os
 import subprocess
 import xml.etree.ElementTree as ET
 import datetime
@@ -81,6 +82,16 @@ def reproject_image_to_master ( master, slave, layer,
           '%f'%extent[3], layer%slave, output])
     return output
 
+def load_emulator_training_set(
+    emu_dir="/home/ucfajlg/Data/python/S2S3Synergy/optical_emulators"):
+    import cPickle
+    emulatorf = "isotropic_MSI_training_set_1100.npz"
+    f = np.load(os.path.join(emu_dir, emulatorf))
+    boa_refl = f['training_input'][:,-1]
+    bands =[ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
+            "B08", "B8A", "B09", "B10", "B11", "B12"]
+    toa_refl = dict(zip(bands, f['training_output'].T))
+    return boa_refl, toa_refl
 
 def hplot(x,y,bar=True,log=True,image=0,new=True,thresh = 10,xlim=[0,1],ylim=[0,1],bins=[128,128]):
     if new:
