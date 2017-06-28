@@ -11,9 +11,10 @@ import os
 import sys
 from collections import namedtuple
 
-from sklearn import linear_model
 
 import numpy as np
+from sklearn import linear_model
+import scipy.ndimage
 import gdal
 import pylab as plt
 
@@ -63,6 +64,26 @@ class TeleSpazioComparison(object):
                 the_date)
                 
         
+    def _get_mask(self, the_date, res="20"):
+        # Get the data
+        boa_set = self.get_l2_data(the_date)
+        if res == "20":
+            g = gdal.Open(boa_set.scl_20)
+            class_id = g.ReadAsArray()
+        elif res == "60":
+            g = gdal.Open(boa_set.scl_60)
+            class_id = g.ReadAsArray()
+        elif res == "10":
+            g = gdal.Open(boa_set.scl_20)
+            class_id20 = g.ReadAsArray()
+            class_id = scipy.ndimage.zoom( class_id20, 2, order=0)
+            
+        # Select water (6), bare soils (5) and vegetation (4)
+        mask = np.logical_and(class_id >= 4, class_id <= 6)
+
+        return mask
+            
+
         
     def _get_safe_files(self, file_type):
         """A method that looks for SAFE files and
@@ -218,7 +239,7 @@ class TeleSpazioComparison(object):
         import pdb;pdb.set_trace()
         hplot(boa_rho[~mask][::sub], toa_rho[~mask][::sub])
 
-    def get_transform(self, the_date, band, 
+    def get_transform(self, the_date, band, mask="L2",
                       sub=10, nv=200, lw=2, odir='figures',
                       apply_model=False):
 
@@ -236,13 +257,23 @@ class TeleSpazioComparison(object):
         toa_rho = g.ReadAsArray()
         g = gdal.Open(boa_set[BOA_list.index(band)])
         boa_rho = g.ReadAsArray()
-        mask_toa = np.logical_or(toa_rho == 0,
-                                  toa_rho > 20000)
-        mask_boa = np.logical_or(boa_rho == 0,
-                                  boa_rho > 20000)
+        if mask == "L2":
+            print "Using L2A product mask"
+            if band in ["B02", "B03", "B04", "B08"]:
+                mask = self._get_mask(the_date, res="10")
+            elif band in ["B05", "B06", "B07", "B11", "B12", "B8A"]:
+                mask = self._get_mask(the_date, res="20")
+            elif band in ["B01", "B09"]:
+                mask = self._get_mask(the_date, res="60")
+        else:
+            mask_toa = np.logical_or(toa_rho == 0,
+                                    toa_rho > 20000)
+            mask_boa = np.logical_or(boa_rho == 0,
+                                    boa_rho > 20000)
+            mask = mask_boa*mask_toa
         toa_rho = toa_rho/10000.
         boa_rho = boa_rho/10000.
-        mask = mask_boa*mask_toa
+        
         x = boa_rho[~mask][::sub]
         y = toa_rho[~mask][::sub]
 
