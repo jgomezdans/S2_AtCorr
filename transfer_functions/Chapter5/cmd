@@ -1,0 +1,1 @@
+pandoc --from=rst --to=docx Chapter5.rst -o Chapter5.docx
