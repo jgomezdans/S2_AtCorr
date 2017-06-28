@@ -218,7 +218,9 @@ class TeleSpazioComparison(object):
         import pdb;pdb.set_trace()
         hplot(boa_rho[~mask][::sub], toa_rho[~mask][::sub])
 
-    def get_transform(self, the_date, band, sub=10, nv=200, lw=2, odir='figures'):
+    def get_transform(self, the_date, band, 
+                      sub=10, nv=200, lw=2, odir='figures',
+                      apply_model=False):
 
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
@@ -276,7 +278,13 @@ class TeleSpazioComparison(object):
         plt.legend(loc='best')
         plt.savefig(fname+'.scatter.pdf')
         plt.close() 
-        return model_ransac
+        if apply_model:
+            approx_boa_rho = model_ransac.predict(toa_rho[~mask].flatten()[:, 
+                                                                 np.newaxis])
+            retval = np.zeros_like (toa_rho)
+            retval[~mask] = approx_boa_rho
+        return model_ransac, retval
+        
 
     def get_modis_files(self, site):
         """Gets the MODIS files. You get in return a dictionary
@@ -313,6 +321,7 @@ class TeleSpazioComparison(object):
                         modis_mapper[product][s2_date] = fnames
         return modis_mapper
 
+
 if __name__ == "__main__":
     ts = TeleSpazioComparison("Ispra", "T32TMR")
     for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
@@ -321,6 +330,6 @@ if __name__ == "__main__":
             break
 
     # do scatter plot and get transform
-    model = ts.get_transform(the_date, "B02")
+    model, boa_approx = ts.get_transform(the_date, "B02", apply_model=True)
     #modis_times = ts.get_modis_files("Ispra")
         
