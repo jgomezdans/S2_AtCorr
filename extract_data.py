@@ -51,6 +51,9 @@ class TeleSpazioComparison(object):
         self.site = site
         self.tile = tile
         self.l1c_files = self._get_safe_files("L1C")
+        self.__find_l2a_data()
+        
+    def __find_l2a_data(self):
         self.l2a_files = self._get_safe_files("L2A")
         self.l1c_datasets = {}
         self.l2a_datasets = {}
