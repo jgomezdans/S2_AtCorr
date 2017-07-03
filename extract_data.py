@@ -30,13 +30,15 @@ MODIS_DIR = "/data/selene/ucfajlg/S2_AC/MCD43/"
 
 BOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
             "B08", "B8A", "B09", "B10", "B11", "B12", "AOT",
-            "WVP", "SCL_20", "SCL_60", "CLD", "SNW"]
+            "WVP", "SCL_20", "SCL_60", "CLD_20", "CLD_60", 
+            "SNW_20", "SNW_60"]
 TOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
             "B08", "B8A", "B09", "B10", "B11", "B12"]
 
 BOA_set = namedtuple("BOA", 
                 "b1 b2 b3 b4 b5 b6 b7 b8 " + 
-                "b8a b9 b10 b11 b12 aot wv scl_20 scl_60 cld snw")
+                "b8a b9 b10 b11 b12 aot wv scl_20 scl_60 " + 
+                "cld_20 cld_60 snw_20 snw_60")
 TOA_set = namedtuple("BOA", 
                 "b1 b2 b3 b4 b5 b6 b7 b8 " + 
                 "b8a b9 b10 b11 b12")
@@ -69,14 +71,15 @@ class TeleSpazioComparison(object):
         self.l1c_datasets = {}
         self.l2a_datasets = {}
         for the_date in self.l1c_files.iterkeys():
-            retval = self.get_l1c_data(the_date)
-            if retval is None:
+            retval1 = self.get_l1c_data(the_date)
+            retval2 = self.get_l2_data(the_date)
+            if retval1 is None or retval2 is None:
                 continue
-                # No tile found
-            self.l1c_datasets[the_date]=retval
-            self.l2a_datasets[the_date] = self.get_l2_data(
-                the_date)
-                
+                # No tile found            
+            else:
+                self.l1c_datasets[the_date] = retval1    
+                self.l2a_datasets[the_date] = retval2
+
         
     def _get_mask(self, the_date, res="20"):
         # Get the data
@@ -244,10 +247,13 @@ class TeleSpazioComparison(object):
                             study_bands[selected_band] = fich
                 study_bands["B10"] = None
         for maska in [ "SNW", "CLD"]:
-            files = glob.glob(os.path.join(granule_dir,
-                                           "QI_DATA",
-                                           "*%s*.jp2" % maska))
-            study_bands[maska] = files[0]
+            
+            for resolution in ["20", "60"]:
+                files = glob.glob(os.path.join(granule_dir,
+                                            "QI_DATA",
+                                            "*%s*_%sm.jp2" 
+                                            % (maska, resolution)))
+                study_bands[maska+"_%s"%resolution] = files[0]
         dataset = [ study_bands[k] for k in BOA_list]
         return BOA_set(*dataset)
         
