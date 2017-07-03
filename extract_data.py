@@ -281,7 +281,7 @@ class TeleSpazioComparison(object):
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
 
-        fname = odir+'/'+'SEN2COR_%s_%s_%s_%s'%(site, tile, the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
+        fname = odir+'/'+'SEN2COR_%s_%s_%s_%s'%(self.site, self.tile, the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
 
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.get_l2_data(the_date)

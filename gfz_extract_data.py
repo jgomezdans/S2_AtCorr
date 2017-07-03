@@ -25,24 +25,28 @@ from helper_functions import parse_xml, load_emulator_training_set
 from extract_data import TeleSpazioComparison
 
 
-CNES_DIR = "/data/selene/ucfajlg/S2_AC/CNES/V1_1/"
+GFZ_DIR = "/data/selene/ucfajlg/S2_AC/GFZ/doidata.gfz-potsdam.de/S2_AC_FS/S2A_MSI_L2A/v0.10/"
 MODIS_DIR = "/data/selene/ucfajlg/S2_AC/MCD43/"
 
 TOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
-            "B08", "B8A", "B09", "B10", "B11", "B12"]
+            "B08", "B8A", "B09",  "B11", "B12"]
 
-CNES_BOA_set = namedtuple("CNES_BOA", 
-                          "b2 b3 b4 b5 b6 b7 b8 " + 
-                          "b8a b11 b12 atb_r1 atb_r2 " +
-                          "sat_r1 sat_r2 clm_r1 clm_r2 mg2_r1 mg2_r2")
-CNES_BOA_list = [ "B02", "B03", "B04", "B05", "B06", "B07",
-            "B08", "B8A", "B11", "B12"]
+GFZ_BOA_set = namedtuple("GFZ_BOA", 
+                          "b1 b2 b3 b4 b5 b6 b7 b8 " + 
+                          "b8a b11 b12 aot wvc " + 
+                          "msk_10m msk_20m msk_60m " + 
+                          "pml2a_10m pml2a_20m pml2a_60m")
+
+GFZ_BOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
+            "B08", "B8A", "B11", "B12", "AOT", "WVC",
+            "MSK_10m", "MSK_20m", "MSK_60m", "PML2A_10m",
+            "PML2A_20m", "PML2A_60m"]
 
 # B1, B8 and B10 are not in CNES dataset
 
 
 
-class CNESComparison(TeleSpazioComparison):
+class GFZComparison(TeleSpazioComparison):
     """A Class to do comparisons of the CNES L2A product."""
     def __init__ (self, site, tile):
         # The parent class creator uses the TeleSpazio data to fetch the L1C
@@ -56,76 +60,60 @@ class CNESComparison(TeleSpazioComparison):
         
         # self.l1c_files is now defined, and starts to look for L2A products
         
-    ###def __find_l2a_data(self):
-        ###self.l2a_files = self._get_safe_files("L2A")
-        ###self.l1c_datasets = {}
-        ###self.l2a_datasets = {}
-        ###for the_date in self.l1c_files.iterkeys():
-            ###retval = self.get_l1c_data(the_date)
-            ###if retval is None:
-                ###continue
-                #### No tile found
-            ###self.l1c_datasets[the_date]=retval
-            ###self.l2a_datasets[the_date] = self.get_l2_data(
-                ###the_date)
+
     def __find_l2a_data(self):         
-        granules = glob.glob( os.path.join(CNES_DIR, "SENTINEL2A*"))
-        granules.sort()
+        #tile is T32TMR (eg)
+        # this goes in /data/selene/ucfajlg/S2_AC/GFZ/doidata.gfz-potsdam.de/S2_AC_FS/S2A_MSI_L2A/v0.10/32T/MR/2016/
         self.l2a_files = {}
-        for granule in granules:
-            if granule.find(self.tile) >= 0: # We have the tile!
-                
-                tstring = granule.split("/")[-1].split("_")[1]
-                key = datetime.datetime.strptime( tstring, 
-                                "%Y%m%d-%H%M%S-%f").replace(second=0,
+        for cur, _dirs, files in os.walk(GFZ_DIR):
+            if cur.find(".SAFE") >=1 and cur.endswith("GRANULE"):
+                try:
+                    
+                    tstring = cur.split("/")[-2].split("_")[7][1:]
+                    tile = _dirs[0].split("_")[9]
+                except ValueError:
+                    continue # dodgy file
+                if tile == self.tile:
+                    
+                    key = datetime.datetime.strptime( tstring, 
+                                "%Y%m%dT%H%M%S").replace(second=0,
                                                             microsecond=0)
-                print "Dealing with iamge acquired on %s" % key
+                    print "Dealing with iamge acquired on %s" % key
                 
-                x = self._unpack_data(granule)
-                self.l2a_files[key] = x
+                    self.l2a_files[key] = os.path.join(cur, _dirs[0])
+                    
             
         
         for k in self.l2a_files.iterkeys():
             try:
                 r = self.l1c_datasets[k]
-                self.l2a_datasets[k] = self.l2a_files[k]
+                self.l2a_datasets[k] = self._gfz_sorter( self.l2a_files[k])
             except KeyError:
                 continue
-            
-            
-            
-       
-    def _unpack_data(self, granule, product=None):
-        # CNES data are zipped up. This unzips the files up and returns a list 
-        # of files back
+    
+    def _gfz_sorter(self, path):
+        granule = {}
+        for cur, _dir, files in os.walk(path):
+            for fich in files:
+                if fich.endswith(".jp2"):
+                    reso = fich.split(".")[0].split("_")[-1] 
+                    # should be 10m, 20m, 60m
+                    if fich.find("AOT") >= 0:
+                        granule["AOT"] = os.path.join(cur, fich)
+                    elif fich.find("CWV") >= 0:
+                        granule["WVC"] = os.path.join(cur, fich)
+                    elif fich.find("MSK") >= 0:
+                        granule["MSK_%s" % reso] = os.path.join(cur, fich)
+                    elif fich.find("PML2A") >= 0:
+                        granule["PML2A_%s" % reso] = os.path.join(cur, fich)
+                    elif fich.split("_")[3] == "L2A": #refl band
+                        band_no = fich.split("_")[-2] # (eg B02)
+                        granule[band_no] = os.path.join(cur, fich)
         
-        zipname = os.path.join(granule, granule.split("/")[-1]+".zip")
-        zipper = zipfile.ZipFile(zipname)
-        
-        if not os.path.exists(os.path.join(granule, "MASKS")):
-            # Uncompress data
-            print "Uncompressing zipfile"
-            zipper.extractall(CNES_DIR)
-        files = []
-        tags = []
-        for product in ["SRE", "ATB", "SAT", "CLM", "MG2"]:
-            for fich in zipper.namelist():
-                if fich.find(product) >= 0:
-                    fname = fich.split("/")[-1]
-                    tag = "_".join(fname.replace(".tif","").split("_")[-2:]).lower()
-                    if product == "SRE":
-                        tag = tag.replace("sre_", "")
-                    tags.append(tag)
-                    files.append ( os.path.join(CNES_DIR, fich))
-        zipper.close()
-        
-        files2 = []
-        tago = ('b2 b3 b4 b5 b6 b7 b8 b8a b11 b12 atb_r1 ' + 
-            'atb_r2 sat_r1 sat_r2 clm_r1 clm_r2 mg2_r1 mg2_r2').split()
-        for t in tago:
-                files2.append(files[tags.index(t)])
-        files = CNES_BOA_set(*files2)
-        return files
+        data = []
+        for d in GFZ_BOA_list:
+            data.append(granule[d])
+        return GFZ_BOA_set(*data)
         
     def get_transform(self, the_date, band, mask="L2",
                       sub=10, nv=200, lw=2, odir='figures',
@@ -134,7 +122,7 @@ class CNESComparison(TeleSpazioComparison):
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
 
-        fname = odir+'/'+'SEN2COR_%s_%s_%s_%s'%(
+        fname = odir+'/'+'GFZ_%s_%s_%s_%s'%(
             self.site, self.tile, the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
 
 
@@ -145,22 +133,36 @@ class CNESComparison(TeleSpazioComparison):
             return None
         g = gdal.Open(toa_set[TOA_list.index(band)])
         toa_rho = g.ReadAsArray()
-        g = gdal.Open(boa_set[CNES_BOA_list.index(band)])
+        g = gdal.Open(boa_set[GFZ_BOA_list.index(band)])
         boa_rho = g.ReadAsArray()
         if mask == "L2":
-            # TODO NEEDS WORK -> use clm_r1/r2 filter veg?
-            # if mg2, times by 01000000 if 0 no cloud 
+            # reelvant MSK set to 10 (clear)
+            #relevant PMSL set to 1
             print "Using L2A product mask"
             if band in ["B02", "B03", "B04", "B08"]:
-                g = gdal.Open(boa_set.mg2_r1)
-                c = g.ReadAsArray()
-                mask = np.bitwise_and(2, c) == 2
+                g = gdal.Open(boa_set.msk_10m)
+                c1 = g.ReadAsArray()
+                g = gdal.Open(boa_set.pml2a_10m)
+                c2 = g.ReadAsArray()
+                #mask = np.logical_and( c1==10, c2 == 1)
+                mask = c1==10
                 
             elif band in ["B05", "B06", "B07", "B11", "B12", "B8A"]:
-                g = gdal.Open(boa_set.mg2_r2)
-                c = g.ReadAsArray()
-                mask = np.bitwise_and(2, c) == 2
-                
+                g = gdal.Open(boa_set.msk_20m)
+                c1 = g.ReadAsArray()
+                g = gdal.Open(boa_set.pml2a_20m)
+                c2 = g.ReadAsArray()
+                mask = c1==10
+                print c1.shape, c2.shape
+                #mask = np.logical_and( c1==10, c2 == 1)
+            elif band in ["B01"] : # 60m
+                g = gdal.Open(boa_set.msk_60m)
+                c1 = g.ReadAsArray()
+                g = gdal.Open(boa_set.pml2a_60m)
+                c2 = g.ReadAsArray()
+                mask = c1==10
+                #mask = np.logical_and( c1==10, c2 == 1)
+
 
         else:
             mask_toa = np.logical_or(toa_rho == 0,
@@ -168,15 +170,21 @@ class CNESComparison(TeleSpazioComparison):
             mask_boa = np.logical_or(boa_rho == 0,
                                     boa_rho > 20000)
             mask = mask_boa*mask_toa
-
+        mask_boa = np.logical_or(boa_rho == 0,
+                                boa_rho > 20000)
+        mask_toa = np.logical_or(toa_rho == 0,
+                                    toa_rho > 20000)
+        mask = np.logical_and( c1==10, ~mask_boa)
+        
         toa_rho = toa_rho/10000.
         boa_rho = boa_rho/10000.
         
-        x = boa_rho[~mask][::sub]
-        y = toa_rho[~mask][::sub]
+        x = boa_rho[mask][::sub]
+        y = toa_rho[mask][::sub]
         
         vmin = np.min([0.0,np.min(x),np.min(y)])
         vmax = np.max([1.0,np.max(x),np.max(y)])
+        print vmin, vmax
         line_X = np.arange(vmin,vmax,(vmax-vmin)/nv)               
         ns = x.size
         xlim = ylim = [vmin,vmax]
@@ -224,6 +232,7 @@ class CNESComparison(TeleSpazioComparison):
         plt.legend(loc='best')
         plt.savefig(fname+'.scatter.pdf')
         plt.close() 
+        print "Saved fname"
         return model_ransac, retval
 
                 
@@ -231,12 +240,12 @@ class CNESComparison(TeleSpazioComparison):
 
 if __name__ == "__main__":
 
-    refl_list = [ "B02", "B03", "B04", "B05", "B06", "B07",
-            "B08", "B8A",  "B11", "B12"]
-    
+            
     for (site,tile) in [ ["Ispra", "T32TMR"], 
                         ["Pretoria", "35JPM"], ["Pretoria", "35JQM"]]:
-        ts = CNESComparison(site, tile)
+        ts = GFZComparison(site, tile)
         for the_date in ts.l2a_datasets.iterkeys():
-            for band in refl_list:
-                ts.get_transform(the_date, band)    
+            for band in TOA_list:
+                ts.get_transform(the_date, band)
+    
+    
