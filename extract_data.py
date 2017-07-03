@@ -9,6 +9,7 @@ import datetime
 import glob
 import os
 import sys
+import zipfile
 from collections import namedtuple
 
 
@@ -24,6 +25,7 @@ from helper_functions import parse_xml, load_emulator_training_set
 parent_folder = "/data/selene/ucfajlg/S2_AC/TeleSpazio/" + \
                 "ftp.telespazio.fr/outgoing/L2A_Products/"
 
+CNES_DIR = "/data/selene/ucfajlg/S2_AC/CNES/V1_1/"
 MODIS_DIR = "/data/selene/ucfajlg/S2_AC/MCD43/"
 
 BOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
@@ -39,9 +41,18 @@ TOA_set = namedtuple("BOA",
                 "b1 b2 b3 b4 b5 b6 b7 b8 " + 
                 "b8a b9 b10 b11 b12")
 
+CNES_BOA_set = namedtuple("CNES_BOA", 
+                          "b2 b3 b4 b5 b6 b7 b8 " + 
+                          "b8a b11 b12 atb_r1 atb_r2 " +
+                          "sat_r1 sat_r2 clm_r1 clm_r2 mg2_r1 mg2_r2")
+CNES_BOA_list = [ "B02", "B03", "B04", "B05", "B06", "B07",
+            "B08", "B8A", "B11", "B12"]
+
+# B1, B8 and B10 are not in CNES dataset
 
 class TeleSpazioComparison(object):
-
+    """A class for analysing the TeleSpazio AtCorr data
+    """
     def __init__ (self, site, tile):
         """
         site is e.g. 'Ispra'. It is used to find folders. 'tile'
@@ -82,6 +93,7 @@ class TeleSpazioComparison(object):
             class_id = scipy.ndimage.zoom( class_id20, 2, order=0)
             
         # Select water (6), bare soils (5) and vegetation (4)
+        # Ignoring class 11 (snow/ice). All others are crap pixels
         mask = np.logical_and(class_id >= 4, class_id <= 6)
 
         return mask
@@ -107,7 +119,8 @@ class TeleSpazioComparison(object):
                         for fich in files]
         time = [datetime.datetime.strptime(time_str,
                 "V%Y%m%dT%H%M%S") for time_str in time_strx]
-        return dict(zip(time,files))
+        times = [t.replace(second=0) for t in time]
+        return dict(zip(times,files))
         
 
     def get_l1c_angles(self, the_date):
@@ -136,7 +149,16 @@ class TeleSpazioComparison(object):
         Returns a TOA_set object, with the bands at their
         native resolutions
         """
-        l1c_dir = self.l1c_files[the_date]
+
+        the_date = the_date.replace(second=0)
+        l1c_dir = None
+        for kdate in self.l1c_files.iterkeys():
+            k = kdate.replace(second=0)
+            if the_date == k:
+                l1c_dir = self.l1c_files[kdate]
+        if l1c_dir is None:
+            print "No pairing for %s" % the_date
+            return None
         granule_dir0 = os.path.join(l1c_dir, "GRANULE/")
         for granule in os.listdir(granule_dir0):
             if granule.find(self.tile) >= 0:
@@ -238,7 +260,7 @@ class TeleSpazioComparison(object):
         toa_rho = toa_rho/10000.
         boa_rho = boa_rho/10000.
         mask = mask_boa*mask_toa
-        import pdb;pdb.set_trace()
+        
         hplot(boa_rho[~mask][::sub], toa_rho[~mask][::sub])
 
     def get_transform(self, the_date, band, mask="L2",
@@ -248,7 +270,7 @@ class TeleSpazioComparison(object):
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
 
-        fname = odir+'/'+'%s_%s'%(the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
+        fname = odir+'/'+'SEN2COR_%s_%s'%(the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
 
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.get_l2_data(the_date)
@@ -281,30 +303,38 @@ class TeleSpazioComparison(object):
 
         vmin = np.min([0.0,np.min(x),np.min(y)])
         vmax = np.max([1.0,np.max(x),np.max(y)])
-
+        line_X = np.arange(vmin,vmax,(vmax-vmin)/nv)               
         ns = x.size
+        xlim = ylim = [vmin,vmax]
         # robust linear model fit
         model = linear_model.LinearRegression(n_jobs=-1)
-        model_ransac = linear_model.RANSACRegressor(model)
-        model_ransac.fit(y.reshape(ns,1), x) 
-        inlier_mask = model_ransac.inlier_mask_
-        outlier_mask = np.logical_not(inlier_mask)
-        line_X = np.arange(vmin,vmax,(vmax-vmin)/nv)       
-        line_y_ransac = model_ransac.predict(line_X[:, np.newaxis])
-        xlim = ylim = [vmin,vmax]
-
         hplot(x, y, new=True,xlim=xlim,ylim=ylim)
         xyrange = xlim,ylim
         plt.xlim(xlim)
         plt.plot(xyrange[0],xyrange[1],'g--', label='1:1 line')
-        plt.plot(line_y_ransac, line_X, color='red', linestyle='-',linewidth=lw, label='RANSAC regressor') 
+
+        try:
+            model_ransac = linear_model.RANSACRegressor(model)
+            model_ransac.fit(y.reshape(ns,1), x) 
+            inlier_mask = model_ransac.inlier_mask_
+            outlier_mask = np.logical_not(inlier_mask)
+
+            line_y_ransac = model_ransac.predict(line_X[:, np.newaxis])
+            plt.plot(line_y_ransac, line_X, color='red', linestyle='-',
+                     linewidth=lw, label='RANSAC regressor') 
+            a,b = model_ransac.predict(np.array([0.,1.])[:, np.newaxis])
+            plt.title(the_date.strftime("%Y-%m-%d %H:%M:%S") + \
+                '\nBOA(%s) = %.3f + %.3f TOA(%s)'%(band,a,b-a,band) + \
+                '\nTOA(%s) = %.3f + %.3f BOA(%s)'%(band,a/(a-b),1./(b-a),band))
+
+        except ValueError:
+            model_ransac = None
+        
+
+        
         plt.xlabel('BOA reflectance Band %s'%band)
         plt.ylabel('TOA reflectance Band %s'%band)
 
-        a,b = model_ransac.predict(np.array([0.,1.])[:, np.newaxis])
-        plt.title(the_date.strftime("%Y-%m-%d %H:%M:%S") + \
-		'\nBOA(%s) = %.3f + %.3f TOA(%s)'%(band,a,b-a,band) + \
-		'\nTOA(%s) = %.3f + %.3f BOA(%s)'%(band,a/(a-b),1./(b-a),band))
 
         if vmax > 1:
             plt.plot(xlim,[1.0,1.0],'k--',label='TOA reflectance == 1')
@@ -358,14 +388,196 @@ class TeleSpazioComparison(object):
         return modis_mapper
 
 
+class CNESComparison(TeleSpazioComparison):
+    """A Class to do comparisons of the CNES L2A product."""
+    def __init__ (self, site, tile):
+        # The parent class creator uses the TeleSpazio data to fetch the L1C
+        # products
+
+        TeleSpazioComparison.__init__(self, site, tile)
+        self.__find_l2a_data()
+        # self.l1c_files is now defined, and starts to look for L2A products
+        
+    ###def __find_l2a_data(self):
+        ###self.l2a_files = self._get_safe_files("L2A")
+        ###self.l1c_datasets = {}
+        ###self.l2a_datasets = {}
+        ###for the_date in self.l1c_files.iterkeys():
+            ###retval = self.get_l1c_data(the_date)
+            ###if retval is None:
+                ###continue
+                #### No tile found
+            ###self.l1c_datasets[the_date]=retval
+            ###self.l2a_datasets[the_date] = self.get_l2_data(
+                ###the_date)
+    def __find_l2a_data(self):         
+        granules = glob.glob( os.path.join(CNES_DIR, "SENTINEL2A*"))
+        granules.sort()
+        self.l2a_files = {}
+        for granule in granules:
+            if granule.find(self.tile) >= 0: # We have the tile!
+                
+                tstring = granule.split("/")[-1].split("_")[1]
+                key = datetime.datetime.strptime( tstring, 
+                                "%Y%m%d-%H%M%S-%f").replace(microsecond=0)
+                print "Dealing with iamge acquired on %s" % key
+                
+                x = self._unpack_data(granule)
+                self.l2a_files[key] = x
+       
+    def _unpack_data(self, granule, product=None):
+        # CNES data are zipped up. This unzips the files up and returns a list 
+        # of files back
+        
+        zipname = os.path.join(granule, granule.split("/")[-1]+".zip")
+        zipper = zipfile.ZipFile(zipname)
+        
+        if not os.path.exists(os.path.join(granule, "MASKS")):
+            # Uncompress data
+            print "Uncompressing zipfile"
+            zipper.extractall(CNES_DIR)
+        files = []
+        tags = []
+        for product in ["SRE", "ATB", "SAT", "CLM", "MG2"]:
+            for fich in zipper.namelist():
+                if fich.find(product) >= 0:
+                    fname = fich.split("/")[-1]
+                    tag = "_".join(fname.replace(".tif","").split("_")[-2:]).lower()
+                    if product == "SRE":
+                        tag = tag.replace("sre_", "")
+                    tags.append(tag)
+                    files.append ( os.path.join(CNES_DIR, fich))
+        zipper.close()
+        
+        files2 = []
+        tago = ('b2 b3 b4 b5 b6 b7 b8 b8a b11 b12 atb_r1 ' + 
+            'atb_r2 sat_r1 sat_r2 clm_r1 clm_r2 mg2_r1 mg2_r2').split()
+        for t in tago:
+                files2.append(files[tags.index(t)])
+        files = CNES_BOA_set(*files2)
+        return files
+        
+    def get_transform(self, the_date, band, mask="L2",
+                      sub=10, nv=200, lw=2, odir='figures',
+                      apply_model=False, plausible=True):
+
+        # ensure odir exists
+        if not os.path.exists(odir): os.makedirs(odir)
+
+        fname = odir+'/'+'MAJA_%s_%s'%(the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
+
+        toa_set = self.get_l1c_data(the_date)
+        boa_set = self.get_l2_data(the_date)
+        if toa_set is None or boa_set is None:
+            print "No TILEs found for %s" % the_date
+            return None
+        g = gdal.Open(toa_set[TOA_list.index(band)])
+        toa_rho = g.ReadAsArray()
+        g = gdal.Open(boa_set[CNES_BOA_list.index(band)])
+        boa_rho = g.ReadAsArray()
+        if mask == "L2":
+            # TODO NEEDS WORK -> use clm_r1/r2 filter veg?
+            # if mg2, times by 01000000 if 0 no cloud 
+            print "Using L2A product mask"
+            if band in ["B02", "B03", "B04", "B08"]:
+                g = gdal.Open(boa_set.mg2_r1)
+                c = g.ReadAsArray()
+                mask = np.bitwise_and(2, c) == 2
+                
+            elif band in ["B05", "B06", "B07", "B11", "B12", "B8A"]:
+                g = gdal.Open(boa_set.mg2_r2)
+                c = g.ReadAsArray()
+                mask = np.bitwise_and(2, c) == 2
+                
+
+        else:
+            mask_toa = np.logical_or(toa_rho == 0,
+                                    toa_rho > 20000)
+            mask_boa = np.logical_or(boa_rho == 0,
+                                    boa_rho > 20000)
+            mask = mask_boa*mask_toa
+        toa_rho = toa_rho/10000.
+        boa_rho = boa_rho/10000.
+        
+        x = boa_rho[~mask][::sub]
+        y = toa_rho[~mask][::sub]
+        
+        vmin = np.min([0.0,np.min(x),np.min(y)])
+        vmax = np.max([1.0,np.max(x),np.max(y)])
+
+        ns = x.size
+        # robust linear model fit
+        model = linear_model.LinearRegression(n_jobs=-1)
+        model_ransac = linear_model.RANSACRegressor(model)
+        model_ransac.fit(y.reshape(ns,1), x) 
+        inlier_mask = model_ransac.inlier_mask_
+        outlier_mask = np.logical_not(inlier_mask)
+        line_X = np.arange(vmin,vmax,(vmax-vmin)/nv)       
+        line_y_ransac = model_ransac.predict(line_X[:, np.newaxis])
+        xlim = ylim = [vmin,vmax]
+
+        hplot(x, y, new=True,xlim=xlim,ylim=ylim)
+        xyrange = xlim,ylim
+        plt.xlim(xlim)
+        plt.plot(xyrange[0],xyrange[1],'g--', label='1:1 line')
+        plt.plot(line_y_ransac, line_X, color='red', linestyle='-',linewidth=lw, label='RANSAC regressor') 
+        plt.xlabel('BOA reflectance Band %s'%band)
+        plt.ylabel('TOA reflectance Band %s'%band)
+
+        a,b = model_ransac.predict(np.array([0.,1.])[:, np.newaxis])
+        plt.title(the_date.strftime("%Y-%m-%d %H:%M:%S") + \
+		'\nBOA(%s) = %.3f + %.3f TOA(%s)'%(band,a,b-a,band) + \
+		'\nTOA(%s) = %.3f + %.3f BOA(%s)'%(band,a/(a-b),1./(b-a),band))
+
+        if vmax > 1:
+            plt.plot(xlim,[1.0,1.0],'k--',label='TOA reflectance == 1')
+        if plausible:
+            boa_emu, toa_emu = load_emulator_training_set()
+            plt.plot(boa_emu, toa_emu[band], '+', markersize=3, c="cyan", label="Plausible")
+        plt.legend(loc='best')
+        plt.savefig(fname+'.scatter.pdf')
+        plt.close() 
+        if apply_model:
+            approx_boa_rho = model_ransac.predict(toa_rho[~mask].flatten()[:, 
+                                                                 np.newaxis])
+            retval = np.zeros_like (toa_rho)
+            retval[~mask] = approx_boa_rho
+        return model_ransac, retval
+                
+        
+
 if __name__ == "__main__":
+
     ts = TeleSpazioComparison("Ispra", "T32TMR")
     for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
-        print ts.get_l1c_data(the_date)
-        if ii == 5:
-            break
-
-    # do scatter plot and get transform
-    model, boa_approx = ts.get_transform(the_date, "B02", apply_model=True)
-    ##modis_times = ts.get_modis_files("Ispra")
         
+        d = ts.get_l2_data(the_date)
+        if d is not None:
+            print d.b8.split("/")[-1]
+         
+#        for band in TOA_list[:1]:
+#            retval = ts.get_transform(the_date, band, apply_model=True)
+        
+    ######ts = TeleSpazioComparison("Pretoria", "35JPM")
+    ######for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
+        ######for band in TOA_list[1:4]:
+            ######retval = ts.get_transform(the_date, band, apply_model=True)
+
+    ######ts = TeleSpazioComparison("Pretoria", "35JQM")
+    ######for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
+        ######for band in TOA_list[1:4]:
+            ######retval = ts.get_transform(the_date, band, apply_model=True)
+
+
+        ####print ts.get_l1c_data(the_date)
+        ####if ii == 5:
+            ####break
+
+    ##### do scatter plot and get transform
+    ####
+    ######modis_times = ts.get_modis_files("Ispra")
+
+    #ts = CNESComparison("Ispra", "T32TMR")
+    #k = ts.l2a_files.keys()[8]
+    #ts.get_transform(k, "B02")
+    
