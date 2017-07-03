@@ -134,7 +134,7 @@ class CNESComparison(TeleSpazioComparison):
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
 
-        fname = odir+'/'+'SEN2COR_%s_%s_%s_%s'%(
+        fname = odir+'/'+'MAJA_%s_%s_%s_%s'%(
             self.site, self.tile, the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
 
 
