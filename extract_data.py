@@ -30,13 +30,13 @@ MODIS_DIR = "/data/selene/ucfajlg/S2_AC/MCD43/"
 
 BOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
             "B08", "B8A", "B09", "B10", "B11", "B12", "AOT",
-            "WVP", "SCL_20", "SCL_60"]
+            "WVP", "SCL_20", "SCL_60", "CLD", "SNW"]
 TOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
             "B08", "B8A", "B09", "B10", "B11", "B12"]
 
 BOA_set = namedtuple("BOA", 
                 "b1 b2 b3 b4 b5 b6 b7 b8 " + 
-                "b8a b9 b10 b11 b12 aot wv scl_20 scl_60")
+                "b8a b9 b10 b11 b12 aot wv scl_20 scl_60 cld snw")
 TOA_set = namedtuple("BOA", 
                 "b1 b2 b3 b4 b5 b6 b7 b8 " + 
                 "b8a b9 b10 b11 b12")
@@ -243,6 +243,11 @@ class TeleSpazioComparison(object):
                             selected_band)) >= 0:
                             study_bands[selected_band] = fich
                 study_bands["B10"] = None
+        for maska in [ "SNW", "CLD"]:
+            files = glob.glob(os.path.join(granule_dir,
+                                           "QI_DATA",
+                                           "*%s*.jp2" % maska))
+            study_bands[maska] = files[0]
         dataset = [ study_bands[k] for k in BOA_list]
         return BOA_set(*dataset)
         
