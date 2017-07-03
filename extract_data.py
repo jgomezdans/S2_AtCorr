@@ -281,7 +281,7 @@ class TeleSpazioComparison(object):
         # ensure odir exists
         if not os.path.exists(odir): os.makedirs(odir)
 
-        fname = odir+'/'+'SEN2COR_%s_%s'%(the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
+        fname = odir+'/'+'SEN2COR_%s_%s_%s_%s'%(site, tile, the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
 
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.get_l2_data(the_date)
@@ -337,10 +337,16 @@ class TeleSpazioComparison(object):
             plt.title(the_date.strftime("%Y-%m-%d %H:%M:%S") + \
                 '\nBOA(%s) = %.3f + %.3f TOA(%s)'%(band,a,b-a,band) + \
                 '\nTOA(%s) = %.3f + %.3f BOA(%s)'%(band,a/(a-b),1./(b-a),band))
+            if apply_model:
+                approx_boa_rho = model_ransac.predict(toa_rho[~mask].flatten()[:, 
+                                                                 np.newaxis])
+                retval = np.zeros_like (toa_rho)
+                retval[~mask] = approx_boa_rho
+
 
         except ValueError:
             model_ransac = None
-        
+            retval = None
 
         
         plt.xlabel('BOA reflectance Band %s'%band)
@@ -355,11 +361,6 @@ class TeleSpazioComparison(object):
         plt.legend(loc='best')
         plt.savefig(fname+'.scatter.pdf')
         plt.close() 
-        if apply_model:
-            approx_boa_rho = model_ransac.predict(toa_rho[~mask].flatten()[:, 
-                                                                 np.newaxis])
-            retval = np.zeros_like (toa_rho)
-            retval[~mask] = approx_boa_rho
         return model_ransac, retval
         
 
@@ -559,15 +560,12 @@ class CNESComparison(TeleSpazioComparison):
 
 if __name__ == "__main__":
 
-    ts = TeleSpazioComparison("Ispra", "T32TMR")
-    for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
-        
-        d = ts.get_l2_data(the_date)
-        if d is not None:
-            print d.b8.split("/")[-1]
-         
-#        for band in TOA_list[:1]:
-#            retval = ts.get_transform(the_date, band, apply_model=True)
+    for (site,tile) in [ ["Ispra", "T32TMR"], 
+                        ["Pretoria", "35JPM"], ["Pretoria", "35JQM"]]:
+        ts = TeleSpazioComparison(site, tile)
+        for ii, the_date in enumerate( ts.l1c_datasets.iterkeys()):        
+            for band in TOA_list[1:9]:
+                retval = ts.get_transform(the_date, band, apply_model=True)
         
     ######ts = TeleSpazioComparison("Pretoria", "35JPM")
     ######for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
