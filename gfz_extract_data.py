@@ -24,8 +24,13 @@ from helper_functions import parse_xml, load_emulator_training_set
 
 from extract_data import TeleSpazioComparison
 
+import re
 
-GFZ_DIR = "/data/selene/ucfajlg/S2_AC/GFZ/doidata.gfz-potsdam.de/S2_AC_FS/S2A_MSI_L2A/v0.10/"
+# select bands...
+regex = r"B[0-9][0-9,A]"
+
+##GFZ_DIR = "/data/selene/ucfajlg/S2_AC/GFZ/doidata.gfz-potsdam.de/S2_AC_FS/S2A_MSI_L2A/v0.10/"
+GFZ_DIR = "/storage/ucfajlg/S2_AC/GFZ/doidata.gfz-potsdam.de/S2_AC_FS/S2A_MSI_L2A/v0.10/"
 MODIS_DIR = "/data/selene/ucfajlg/S2_AC/MCD43/"
 
 TOA_list = [ "B01", "B02", "B03", "B04", "B05", "B06", "B07",
@@ -88,31 +93,42 @@ class GFZComparison(TeleSpazioComparison):
             try:
                 r = self.l1c_datasets[k]
                 self.l2a_datasets[k] = self._gfz_sorter( self.l2a_files[k])
+                print k
             except KeyError:
                 continue
     
     def _gfz_sorter(self, path):
         granule = {}
         for cur, _dir, files in os.walk(path):
+            
             for fich in files:
+                
                 if fich.endswith(".jp2"):
+                    # Need to spelunk this fname for
+                    # the tiff file...
+                    suffix = cur.split("/")[-1]
+                    prefix = "/".join(cur.split("/")[:-1])
+                    fname = suffix + fich.replace("jp2", "tif")
                     reso = fich.split(".")[0].split("_")[-1] 
                     # should be 10m, 20m, 60m
                     if fich.find("AOT") >= 0:
-                        granule["AOT"] = os.path.join(cur, fich)
+                        granule["AOT"] = os.path.join(prefix, fname)
                     elif fich.find("CWV") >= 0:
-                        granule["WVC"] = os.path.join(cur, fich)
+                        granule["WVC"] =os.path.join(prefix, fname)
                     elif fich.find("MSK") >= 0:
-                        granule["MSK_%s" % reso] = os.path.join(cur, fich)
+                        granule["MSK_%s" % reso] =  os.path.join(prefix, fname)
                     elif fich.find("PML2A") >= 0:
-                        granule["PML2A_%s" % reso] = os.path.join(cur, fich)
-                    elif fich.split("_")[3] == "L2A": #refl band
+                        granule["PML2A_%s" % reso] = os.path.join(prefix, fname)
+                    elif re.search(regex, fich):
                         band_no = fich.split("_")[-2] # (eg B02)
-                        granule[band_no] = os.path.join(cur, fich)
+                        granule[band_no] = os.path.join(prefix, fname)
         
         data = []
         for d in GFZ_BOA_list:
+            if not os.path.exists ( granule[d]):
+                raise IOError
             data.append(granule[d])
+            
         return GFZ_BOA_set(*data)
         
     def get_transform(self, the_date, band, mask="L2",
@@ -125,12 +141,14 @@ class GFZComparison(TeleSpazioComparison):
         fname = odir+'/'+'GFZ_%s_%s_%s_%s'%(
             self.site, self.tile, the_date.strftime("%Y-%m-%d %H:%M:%S"), band)
 
-
+        print fname
         toa_set = self.get_l1c_data(the_date)
         boa_set = self.l2a_datasets[the_date]
         if toa_set is None or boa_set is None:
             print "No TILEs found for %s" % the_date
             return None
+        print toa_set[TOA_list.index(band)]
+        print boa_set[GFZ_BOA_list.index(band)]
         g = gdal.Open(toa_set[TOA_list.index(band)])
         toa_rho = g.ReadAsArray()
         g = gdal.Open(boa_set[GFZ_BOA_list.index(band)])
@@ -181,7 +199,7 @@ class GFZComparison(TeleSpazioComparison):
         
         x = boa_rho[mask][::sub]
         y = toa_rho[mask][::sub]
-        
+        print "Masked data"
         vmin = np.min([0.0,np.min(x),np.min(y)])
         vmax = np.max([1.0,np.max(x),np.max(y)])
         print vmin, vmax
@@ -189,18 +207,20 @@ class GFZComparison(TeleSpazioComparison):
         ns = x.size
         xlim = ylim = [vmin,vmax]
         # robust linear model fit
+        print "Fitting linear model"
         model = linear_model.LinearRegression(n_jobs=-1)
         hplot(x, y, new=True,xlim=xlim,ylim=ylim)
         xyrange = xlim,ylim
         plt.xlim(xlim)
         plt.plot(xyrange[0],xyrange[1],'g--', label='1:1 line')
-
+        retval = None
         try:
+            print "Fitting RANSAC model"
             model_ransac = linear_model.RANSACRegressor(model)
             model_ransac.fit(y.reshape(ns,1), x) 
             inlier_mask = model_ransac.inlier_mask_
             outlier_mask = np.logical_not(inlier_mask)
-
+            print "RANSAC model predictions"
             line_y_ransac = model_ransac.predict(line_X[:, np.newaxis])
             plt.plot(line_y_ransac, line_X, color='red', linestyle='-',
                      linewidth=lw, label='RANSAC regressor') 
@@ -216,6 +236,7 @@ class GFZComparison(TeleSpazioComparison):
 
 
         except ValueError:
+            print "RANSAC failed"
             model_ransac = None
             retval = None
 
@@ -241,11 +262,16 @@ class GFZComparison(TeleSpazioComparison):
 if __name__ == "__main__":
 
             
-    for (site,tile) in [ ["Ispra", "T32TMR"], 
-                        ["Pretoria", "35JPM"], ["Pretoria", "35JQM"]]:
+    #for (site,tile) in [["Pretoria", "35JPM"], ["Ispra", "T32TMR"], 
+                        #["Pretoria", "35JQM"]]:
+    for (site,tile) in [ ["Ispra", "T32TMR"]]:
+
         ts = GFZComparison(site, tile)
-        for the_date in ts.l2a_datasets.iterkeys():
-            for band in TOA_list:
-                ts.get_transform(the_date, band)
+        
+        for jj, the_date in enumerate(ts.l2a_datasets.iterkeys()):
+            for band in TOA_list[1:]:
+                if jj > 2:
+                    print site, tile, the_date, band
+                    ts.get_transform(the_date, band, apply_model=False)
     
     

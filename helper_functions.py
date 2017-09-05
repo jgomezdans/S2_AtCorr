@@ -95,7 +95,10 @@ def load_emulator_training_set(
 
 def hplot(x,y,bar=True,log=True,image=0,new=True,thresh = 10,xlim=[0,1],ylim=[0,1],bins=[128,128]):
     if new:
-      plt.figure(figsize=(10,10))
+      fig = plt.figure(figsize=(10,10))
+      ax = plt.gca()
+    else:
+        ax = new
     xyrange = [x.min(),x.max()],[y.min(),y.max()]
     xyrange = xlim,ylim
     min,max = np.min([x.min(),y.min()]),np.max([x.max(),y.max()])
@@ -110,10 +113,10 @@ def hplot(x,y,bar=True,log=True,image=0,new=True,thresh = 10,xlim=[0,1],ylim=[0,
     image += np.flipud(hh.T)
 
     if bar:
-      im = plt.imshow(image,cmap='magma',extent=np.array(xyrange).flatten(),\
+      im = ax.imshow(image,cmap='magma',extent=np.array(xyrange).flatten(),\
                    interpolation='nearest')
-      plt.plot(xyrange[0],xyrange[1],'g--', lw=1.5)
-      plt.colorbar(fraction=0.04)
+      ax.plot(xyrange[0],xyrange[1],'g--', lw=1.5)
+      ##fig.colorbar(fraction=0.04)
     return image
 
 def parse_xml(filename):
