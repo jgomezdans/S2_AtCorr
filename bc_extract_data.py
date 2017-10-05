@@ -129,9 +129,6 @@ if __name__ == "__main__":
         
         for jj, the_date in enumerate(ts.l2a_datasets.iterkeys()):
             print the_date, ts.l1c_datasets[the_date]
-            #for band in TOA_list[1:]:
-                #if jj > 2:
-                #    print site, tile, the_date, band
-                    #ts.get_transform(the_date, band, apply_model=False)
-                    Find_corresponding_pixels(ts.l2a_datasets[the_date].b2
+            ts.compare_boa_refl_MCD43(the_date, 1)
+            break
     

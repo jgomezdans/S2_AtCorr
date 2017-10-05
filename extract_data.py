@@ -372,7 +372,7 @@ class TeleSpazioComparison(object):
         angle = 0.
         print "NOTE!! Gaussian not optimised for x- and y-shift!"
         psf = gaussian(xstd, ystd, angle, norm = True)
-        mapping_arrays = Find_corresponding_pixels(ts.l2a_datasets[the_date][the_band+1])
+        mapping_arrays = Find_corresponding_pixels(self.l2a_datasets[the_date][the_band+1])
         tile = mapping_arrays.keys()[0] # Only 1 tile...
         self.modis_files (tile, self.site)
         rho_boa_hires = gdal.Open(

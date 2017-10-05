@@ -25,7 +25,7 @@ from helper_functions import parse_xml, load_emulator_training_set
 import kernels
 from spatial_mapping import *
 
-from extrac_data import TeleSpazioComparison
+from extract_data import TeleSpazioComparison
 
 parent_folder = "/data/selene/ucfajlg/S2_AC/TeleSpazio/" + \
                 "ftp.telespazio.fr/outgoing/L2A_Products/"
@@ -113,3 +113,16 @@ class CNESComparison(TeleSpazioComparison):
         files = CNES_BOA_set(*files2)
         return files
         
+if __name__ == "__main__":
+    from spatial_mapping import *
+
+    for (site,tile) in [ ["Ispra", "T32TMR"]]:
+                        #["Pretoria_CSIR-DPSS", "35JPM"], 
+                        #["Pretoria_CSIR-DPSS", "35JQM"]]:
+
+        ts = CNESComparison(site, tile)
+        
+        for ii, the_date in enumerate( ts.l2a_datasets.iterkeys()):        
+            print the_date
+            ts.compare_boa_refl_MCD43(the_date, 1)
+            break

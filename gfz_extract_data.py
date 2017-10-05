@@ -268,10 +268,6 @@ if __name__ == "__main__":
 
         ts = GFZComparison(site, tile)
         
-        for jj, the_date in enumerate(ts.l2a_datasets.iterkeys()):
-            for band in TOA_list[1:]:
-                if jj > 2:
-                    print site, tile, the_date, band
-                    ts.get_transform(the_date, band, apply_model=False)
-    
-    
+        for ii, the_date in enumerate( ts.l2a_datasets.iterkeys()):        
+            print the_date
+            ts.compare_boa_refl_MCD43(the_date, 1)
