@@ -448,3 +448,4 @@ if __name__ == "__main__":
         for ii, the_date in enumerate( ts.l2a_datasets.iterkeys()):        
             print the_date
             ts.compare_boa_refl_MCD43(the_date, 1)
+            break
