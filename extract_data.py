@@ -404,7 +404,7 @@ class TeleSpazioComparison(object):
             RossType='Thick' )
         kk = np.array([1., K.Ross[0], K.Li[0]])
         
-        k = min(self.modis_filelist.keys(), 
+        k = min(self.modis_filelist["MCD43A1"].keys(), 
                 key=lambda x: abs(x - the_date))
         pred_boa_refl = np.zeros((2400, 2400))
         for band, w in band_equivalences[the_band]:
@@ -432,13 +432,6 @@ class TeleSpazioComparison(object):
                 date_str = os.path.basename(fich).split(".")[1]
                 the_date = datetime.datetime.strptime(date_str, "A%Y%j")
                 self.modis_filelist[product][the_date] = fich
-
-
-
-                
-        
-                
-            
             
 if __name__ == "__main__":
     from spatial_mapping import *
@@ -454,41 +447,4 @@ if __name__ == "__main__":
         
         for ii, the_date in enumerate( ts.l2a_datasets.iterkeys()):        
             print the_date
-            
-            
-
-            
-            break
-            
-            
-            
-
-
-
-            #for band in TOA_list[1:9]:
-            #    retval = ts.get_transform(the_date, band, apply_model=True)
-            
-        
-    ######ts = TeleSpazioComparison("Pretoria", "35JPM")
-    ######for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
-        ######for band in TOA_list[1:4]:
-            ######retval = ts.get_transform(the_date, band, apply_model=True)
-
-    ######ts = TeleSpazioComparison("Pretoria", "35JQM")
-    ######for ii, the_date in enumerate( ts.l1c_files.iterkeys()):
-        ######for band in TOA_list[1:4]:
-            ######retval = ts.get_transform(the_date, band, apply_model=True)
-
-
-        ####print ts.get_l1c_data(the_date)
-        ####if ii == 5:
-            ####break
-
-    ##### do scatter plot and get transform
-    ####
-    ######modis_times = ts.get_modis_files("Ispra")
-
-    #ts = CNESComparison("Ispra", "T32TMR")
-    #k = ts.l2a_files.keys()[8]
-    #ts.get_transform(k, "B02")
-    
+            ts.compare_boa_refl_MCD43(the_date, 1)
